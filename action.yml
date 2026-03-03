@@ -1,5 +1,5 @@
 name: 'Quant Agent Deploy'
-description: 'Deploy agent prompts and validation specs to the Quant platform'
+description: 'Create, update, and manage AI agents and their validation specs on the Quant platform'
 branding:
   icon: 'upload-cloud'
   color: 'blue'
@@ -11,7 +11,7 @@ inputs:
     description: 'Quant organisation name'
     required: true
   agents_dir:
-    description: 'Directory containing agent definitions (prompt files + validation specs)'
+    description: 'Directory containing agent definitions (agent.json, prompt, validation spec, fixtures)'
     required: true
     default: 'agents/'
   base_url:
