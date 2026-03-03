@@ -98,7 +98,7 @@ async function run(): Promise<void> {
         core.info(`Updating agent: ${config.name} (${agentId})`);
         const url = `${baseUrl}/organizations/${organization}/ai/agents/${agentId}`;
         const response = await fetch(url, {
-          method: 'PUT',
+          method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
