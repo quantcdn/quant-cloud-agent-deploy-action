@@ -1,5 +1,5 @@
 name: 'Quant Agent Deploy'
-description: 'Create, update, and manage AI agents and their validation specs on the Quant platform'
+description: 'Create, update, and manage AI agents on the Quant platform'
 branding:
   icon: 'upload-cloud'
   color: 'blue'
@@ -11,7 +11,7 @@ inputs:
     description: 'Quant organisation name'
     required: true
   agents_dir:
-    description: 'Directory containing agent definitions (agent.json, prompt, validation spec, fixtures)'
+    description: 'Directory containing agent definitions (agent.json, prompt)'
     required: true
     default: 'agents/'
   base_url:
@@ -20,8 +20,6 @@ inputs:
 outputs:
   deployed_agents:
     description: 'JSON array of deployed agent IDs'
-  specs_registered:
-    description: 'Number of validation specs registered'
 runs:
   using: 'node20'
   main: 'dist/index.js'

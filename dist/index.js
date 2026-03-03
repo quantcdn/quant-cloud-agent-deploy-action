@@ -25698,14 +25698,12 @@ async function run() {
             return;
         }
         const deployedAgents = [];
-        let specsRegistered = 0;
         const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
         for (const entry of entries) {
             if (!entry.isDirectory())
                 continue;
             const agentDir = path.join(resolvedDir, entry.name);
             const configPath = path.join(agentDir, 'agent.json');
-            const specPath = path.join(agentDir, 'validation-spec.json');
             if (!fs.existsSync(configPath)) {
                 core.warning(`Skipping ${entry.name}: no agent.json found`);
                 continue;
@@ -25793,37 +25791,14 @@ async function run() {
                 fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
                 core.info(`  Updated agent.json with agent_id`);
             }
-            // Register validation spec if present.
-            if (fs.existsSync(specPath)) {
-                const spec = JSON.parse(fs.readFileSync(specPath, 'utf-8'));
-                const url = `${baseUrl}/organizations/${organization}/agents/${agentId}/validation-spec`;
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(spec),
-                });
-                if (response.ok) {
-                    core.info(`  Validation spec registered`);
-                    specsRegistered++;
-                }
-                else {
-                    const errorBody = await response.text();
-                    core.warning(`  Failed to register spec: ${response.status} ${errorBody}`);
-                }
-            }
             deployedAgents.push({ agent_id: agentId, name: config.name, created });
         }
         core.setOutput('deployed_agents', JSON.stringify(deployedAgents.map(a => a.agent_id)));
-        core.setOutput('specs_registered', specsRegistered.toString());
         core.info('');
         core.info('=== Deploy Summary ===');
         for (const agent of deployedAgents) {
             core.info(`  ${agent.created ? 'Created' : 'Updated'}: ${agent.name} (${agent.agent_id})`);
         }
-        core.info(`  Validation specs registered: ${specsRegistered}`);
     }
     catch (error) {
         core.setFailed(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);

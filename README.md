@@ -1,12 +1,11 @@
 # Quant Agent Deploy Action
 
-A GitHub Action for creating, updating, and managing AI agents on the Quant platform. Reads agent definitions from a directory structure, creates or updates agents via the API, and registers validation specs.
+A GitHub Action for creating, updating, and managing AI agents on the Quant platform. Reads agent definitions from a directory structure and creates or updates agents via the API.
 
 ## Features
 
 - **Agent Lifecycle Management**: Creates new agents or updates existing ones based on `agent.json`
 - **Prompt-as-Code**: Store system prompts in version-controlled files (Markdown, text, etc.)
-- **Spec Registration**: Automatically registers validation specs alongside agent definitions
 - **Idempotent**: First run creates agents and writes back the `agent_id`; subsequent runs update
 
 ## Inputs
@@ -23,7 +22,6 @@ A GitHub Action for creating, updating, and managing AI agents on the Quant plat
 | Output | Description |
 |--------|-------------|
 | `deployed_agents` | JSON array of deployed agent IDs |
-| `specs_registered` | Number of validation specs registered |
 
 ## Directory Structure
 
@@ -32,8 +30,8 @@ agents/
   my-agent/
     agent.json              # Required — agent configuration
     prompt.md               # System prompt (referenced by prompt_file in agent.json)
-    validation-spec.json    # Optional — quality validation checks
-    fixtures.json           # Optional — tool fixture responses for test mode
+    validation-spec.json    # Quality validation checks (used by validate action)
+    fixtures.json           # Tool fixture responses for test mode (used by validate action)
 ```
 
 ## `agent.json`
@@ -74,69 +72,6 @@ Full agent definition matching the Quant AI API:
 
 On the first run, if `agent_id` is not set in `agent.json`, the action creates a new agent via the API and **writes the returned `agent_id` back into `agent.json`**. Commit this change so subsequent runs update the existing agent instead of creating duplicates.
 
-## `validation-spec.json`
-
-Defines quality checks for the agent validation pipeline:
-
-```json
-{
-  "name": "assessment-quality",
-  "version": "1.0",
-  "threshold": 0.7,
-  "checks": {
-    "behavioral": [
-      {
-        "id": "calls-submit",
-        "description": "Agent calls submit_assessment tool",
-        "weight": 3,
-        "assertion": {
-          "type": "tool_called",
-          "tool": "submit_assessment"
-        }
-      }
-    ],
-    "constraint": [
-      {
-        "id": "scores-in-range",
-        "description": "All scores are between 1 and 10",
-        "weight": 2,
-        "assertion": {
-          "type": "field_range",
-          "path": "items[*].score",
-          "min": 1,
-          "max": 10
-        }
-      }
-    ],
-    "quality": [
-      {
-        "id": "reasoning-length",
-        "description": "Each reasoning field is at least 50 chars",
-        "weight": 2,
-        "assertion": {
-          "type": "field_length",
-          "path": "items[*].reasoning",
-          "min": 50
-        }
-      }
-    ]
-  }
-}
-```
-
-### Available Assertion Types
-
-| Type | Purpose | Key fields |
-|------|---------|------------|
-| `tool_called` | Agent called a specific tool | `tool` |
-| `tool_called_with` | Tool called with specific param value | `tool`, `path`, `expected` |
-| `field_length` | String field meets min/max length | `path`, `min`, `max` |
-| `field_range` | Numeric field within range | `path`, `min`, `max` |
-| `field_in_enum` | Field value is in allowed set | `path`, `values` |
-| `array_ratio` | Array has min ratio of items matching | `path`, `condition`, `min_ratio` |
-| `distinct_values` | Array has enough unique values | `path`, `min` |
-| `output_contains_when` | Conditional content check | `condition`, `path`, `contains` |
-
 ## Usage
 
 ### Basic Usage
@@ -165,9 +100,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy Agents
+      - name: Deploy Agent
         uses: quantcdn/quant-cloud-agent-deploy-action@v1
-        id: deploy
         with:
           quant_api_key: ${{ secrets.QUANT_API_KEY }}
           quant_organization: ${{ secrets.QUANT_ORGANIZATION }}
@@ -189,6 +123,7 @@ jobs:
           quant_organization: ${{ secrets.QUANT_ORGANIZATION }}
           agent_id: ${{ vars.AGENT_ID }}
           agent_output: ${{ steps.dispatch.outputs.agent_output }}
+          validation_spec: agents/my-agent/validation-spec.json
           conversation_context: ${{ steps.dispatch.outputs.conversation_context }}
           test_fixtures: agents/my-agent/fixtures.json
 ```
