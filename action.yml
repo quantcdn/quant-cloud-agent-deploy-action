@@ -1,0 +1,27 @@
+name: 'Quant Agent Deploy'
+description: 'Deploy agent prompts and validation specs to the Quant platform'
+branding:
+  icon: 'upload-cloud'
+  color: 'blue'
+inputs:
+  quant_api_key:
+    description: 'Quant API key'
+    required: true
+  quant_organization:
+    description: 'Quant organisation name'
+    required: true
+  agents_dir:
+    description: 'Directory containing agent definitions (prompt files + validation specs)'
+    required: true
+    default: 'agents/'
+  base_url:
+    description: 'Quant API base URL'
+    required: false
+outputs:
+  deployed_agents:
+    description: 'JSON array of deployed agent IDs'
+  specs_registered:
+    description: 'Number of validation specs registered'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

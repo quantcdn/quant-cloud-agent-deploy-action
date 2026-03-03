@@ -1,0 +1,18 @@
+{
+  "name": "quant-agent-deploy-action",
+  "version": "1.0.0",
+  "description": "GitHub Action for deploying agent prompts and validation specs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vercel/ncc": "^0.38.4",
+    "typescript": "^5.9.3"
+  }
+}
