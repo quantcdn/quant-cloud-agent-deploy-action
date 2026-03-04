@@ -1,8 +1,9 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Configuration, AIAgentsApi, CreateAIAgentRequest, UpdateAIAgentRequest } from '@quantcdn/quant-client';
 
-const DEFAULT_BASE_URL = 'https://dashboard.quantcdn.io/api/v3';
+const DEFAULT_BASE_URL = 'https://dashboard.quantcdn.io';
 
 interface AgentConfig {
   // If set, update an existing agent. If omitted, create a new one.
@@ -38,6 +39,15 @@ async function run(): Promise<void> {
     const agentsDir = core.getInput('agents_dir', { required: true });
     const baseUrl = core.getInput('base_url') || DEFAULT_BASE_URL;
 
+    // The SDK appends /api/v3/... paths internally, so strip it if provided.
+    const basePath = baseUrl.replace(/\/api\/v3\/?$/, '');
+
+    const config = new Configuration({
+      basePath,
+      accessToken: apiKey,
+    });
+    const agentsApi = new AIAgentsApi(config);
+
     const resolvedDir = path.resolve(agentsDir);
     if (!fs.existsSync(resolvedDir)) {
       core.setFailed(`Agents directory not found: ${resolvedDir}`);
@@ -58,12 +68,12 @@ async function run(): Promise<void> {
         continue;
       }
 
-      const config: AgentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const agentConfig: AgentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
       // Resolve system prompt from file if prompt_file is set.
-      let systemPrompt = config.systemPrompt || '';
-      if (config.prompt_file) {
-        const promptPath = path.join(agentDir, config.prompt_file);
+      let systemPrompt = agentConfig.systemPrompt || '';
+      if (agentConfig.prompt_file) {
+        const promptPath = path.join(agentDir, agentConfig.prompt_file);
         if (!fs.existsSync(promptPath)) {
           core.setFailed(`Prompt file not found: ${promptPath}`);
           return;
@@ -76,80 +86,74 @@ async function run(): Promise<void> {
         return;
       }
 
-      // Build the agent payload matching the platform API.
-      const agentPayload: Record<string, unknown> = {
-        name: config.name,
-        description: config.description,
-        systemPrompt,
-        modelId: config.modelId,
-      };
-
-      if (config.temperature !== undefined) agentPayload.temperature = config.temperature;
-      if (config.maxTokens !== undefined) agentPayload.maxTokens = config.maxTokens;
-      if (config.allowedTools) agentPayload.allowedTools = config.allowedTools;
-      if (config.allowedCollections) agentPayload.allowedCollections = config.allowedCollections;
-      if (config.group) agentPayload.group = config.group;
-
-      let agentId = config.agent_id;
+      let agentId = agentConfig.agent_id;
       let created = false;
 
       if (agentId) {
         // Update existing agent.
-        core.info(`Updating agent: ${config.name} (${agentId})`);
-        const url = `${baseUrl}/organizations/${organization}/ai/agents/${agentId}`;
-        const response = await fetch(url, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(agentPayload),
-        });
+        core.info(`Updating agent: ${agentConfig.name} (${agentId})`);
 
-        if (!response.ok) {
-          const errorBody = await response.text();
-          core.setFailed(`Failed to update agent ${agentId}: ${response.status} ${errorBody}`);
+        const updateRequest: UpdateAIAgentRequest = {
+          name: agentConfig.name,
+          description: agentConfig.description,
+          systemPrompt,
+          modelId: agentConfig.modelId,
+          temperature: agentConfig.temperature,
+          maxTokens: agentConfig.maxTokens,
+          allowedTools: agentConfig.allowedTools,
+          allowedCollections: agentConfig.allowedCollections,
+          group: agentConfig.group,
+        };
+
+        try {
+          await agentsApi.updateAIAgent(organization, agentId, updateRequest);
+          core.info(`  Agent updated successfully`);
+        } catch (err: any) {
+          const message = err.response?.data?.error || err.message || String(err);
+          core.setFailed(`Failed to update agent ${agentId}: ${message}`);
           return;
         }
-
-        core.info(`  Agent updated successfully`);
       } else {
         // Create new agent.
-        core.info(`Creating agent: ${config.name}`);
-        const url = `${baseUrl}/organizations/${organization}/ai/agents`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(agentPayload),
-        });
+        core.info(`Creating agent: ${agentConfig.name}`);
 
-        if (!response.ok) {
-          const errorBody = await response.text();
-          core.setFailed(`Failed to create agent ${config.name}: ${response.status} ${errorBody}`);
+        const createRequest: CreateAIAgentRequest = {
+          name: agentConfig.name,
+          description: agentConfig.description,
+          systemPrompt,
+          modelId: agentConfig.modelId,
+          temperature: agentConfig.temperature,
+          maxTokens: agentConfig.maxTokens,
+          allowedTools: agentConfig.allowedTools,
+          allowedCollections: agentConfig.allowedCollections,
+          group: agentConfig.group,
+        };
+
+        try {
+          const response = await agentsApi.createAIAgent(organization, createRequest);
+          const agent = response.data.agent as { agentId?: string } | undefined;
+          agentId = agent?.agentId;
+
+          if (!agentId) {
+            core.setFailed(`Agent creation succeeded but no agentId returned for ${agentConfig.name}`);
+            return;
+          }
+
+          core.info(`  Agent created with ID: ${agentId}`);
+          created = true;
+
+          // Write the agent_id back to agent.json so subsequent runs update instead of create.
+          agentConfig.agent_id = agentId;
+          fs.writeFileSync(configPath, JSON.stringify(agentConfig, null, 2) + '\n');
+          core.info(`  Updated agent.json with agent_id`);
+        } catch (err: any) {
+          const message = err.response?.data?.error || err.message || String(err);
+          core.setFailed(`Failed to create agent ${agentConfig.name}: ${message}`);
           return;
         }
-
-        const result = await response.json() as { agent?: { agentId?: string } };
-        agentId = result.agent?.agentId;
-
-        if (!agentId) {
-          core.setFailed(`Agent creation succeeded but no agentId returned for ${config.name}`);
-          return;
-        }
-
-        core.info(`  Agent created with ID: ${agentId}`);
-        created = true;
-
-        // Write the agent_id back to agent.json so subsequent runs update instead of create.
-        config.agent_id = agentId;
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
-        core.info(`  Updated agent.json with agent_id`);
       }
 
-      deployedAgents.push({ agent_id: agentId, name: config.name, created });
+      deployedAgents.push({ agent_id: agentId!, name: agentConfig.name, created });
     }
 
     core.setOutput('deployed_agents', JSON.stringify(deployedAgents.map(a => a.agent_id)));
