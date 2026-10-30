@@ -21,5 +21,6 @@ outputs:
   deployed_agents:
     description: 'JSON map of directory name to agent ID'
 runs:
-  using: 'node20'
+  using: 'node24'
+  pre: 'runtime-check.cjs'
   main: 'dist/index.js'
